@@ -15,6 +15,7 @@ def autodetect_channels(header):
 	has_alpha = "A" in avail or "a" in avail
 	has_rgb = ("R" in avail or "r" in avail) and ("G" in avail or "g" in avail) and ("B" in avail or "b" in avail)
 	has_z = "Z" in avail or "z" in avail
+	has_z_as_R = "R" in avail and "G" not in avail
 	if has_rgb: 
 		if has_alpha:
 			if uppercase:
@@ -29,6 +30,8 @@ def autodetect_channels(header):
 	else:
 		if has_z: 
 			channels = ("z")
+		elif has_z_as_R:
+			channels = ("R")
 		else: 
 			channels = None
 	return channels
@@ -73,6 +76,9 @@ def write_image(filename, image, channels = None):
 	for ch_name, ch_string in zip(channels, channel_strings):
 		ch_dict[ch_name] = ch_string
 	# Write the three color channels to the output file
-	out = OpenEXR.OutputFile(filename, OpenEXR.Header(image.shape[1], image.shape[0]))
+	header = OpenEXR.Header(image.shape[1], image.shape[0])
+	if channels == ("R", "G", "B", "A"):
+		header["channels"]["A"] = header["channels"]["R"]
+	out = OpenEXR.OutputFile(filename, header)
 	out.writePixels(ch_dict)
 	

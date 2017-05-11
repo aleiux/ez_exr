@@ -1,8 +1,9 @@
 import numpy as np
 from numpy import inf
 from scipy.ndimage import convolve
+from scipy.ndimage.filters import gaussian_filter
 import itertools
-
+import IPython
 class Frame:
 	"""
 	Holds related buffers for a single frame. Cleans up z infinity values to be 0. Also corrects for fringing artefacts
@@ -10,10 +11,32 @@ class Frame:
 	def __init__(self, image, z = None):
 		self.image = image
 		if z is not None:
+			"""
+			pad_size = 1
+			pad_width = 2*pad_size + 1
+			need_cleaning = np.zeros(z.shape)
+			need_cleaning[z == inf] = 1.
+			poison_filter = np.zeros((3, 3)).astype(float)
+			poison_filter[:, :] = 1.
+			need_cleaning = convolve(need_cleaning[:, :, 0], poison_filter, mode = 'reflect')
+			need_cleaning[image[:, :, 3] == 0.] = 0.
+			"""
 			z[z == -inf] = 0.
 			z[z == inf] = 0.
 			z  = z * image[:, :, 3:4]
+			"""
+			z_copy = z.astype(float)
+			z_copy[need_cleaning > 0] = 0.
+			z_pad = np.pad(z_copy[:, :, 0], pad_size, 'constant')
+			for i, j in itertools.product(range(z.shape[0]), range(z.shape[1])):
+				if need_cleaning[i][j] > 0:
+					#window = z_pad[i:i+pad_width, j:j+pad_width]
+					#z[i][j] = np.max(window)
+					z[i][j] = 0
+			"""
 		self.z = z
+		#IPython.embed()
+		
 def z_comp(frame0, frame1):
 	"""
 	Performs Z buffer compositing on the two images. Returns new frame
@@ -44,7 +67,6 @@ def z_comp(frame0, frame1):
 				mi, mj = np.unravel_index(window_norm.argmin(), window_norm.shape)
 				c1[i][j] = c1[abs(i + mi - 1)][abs(j + mj -1)]
 				z_here = frame1.z[i][j]
-
 				window_0 = zr0[i:i+3, j:j+3]
 				window_1 = zr1[i:i+3, j:j+3]
 				sandwiches = np.logical_and(z_here > window_0,  window_0 > window_1).astype(float)
@@ -56,13 +78,10 @@ def z_comp(frame0, frame1):
 				mi, mj = np.unravel_index(window.argmin(), window.shape)
 				c0[i][j] = c0[i + mi - 1][j + mj -1]
 				z_here = frame0.z[i][j]
-
 				window_0 = zr0[i:i+3, j:j+3]
 				window_1 = zr1[i:i+3, j:j+3]
 				sandwiches = np.logical_and(z_here > window_1,  window_1 > window_0).astype(float)
 				frame0.image[i][j][3] = 1 - np.sum(sandwiches) / 8.
-				
-				
 	im_result = np.zeros(frame0.image.shape, frame0.image.dtype)
 	im_result[:, :, :3] = c0 - (c0 * frame1.image[:, :, 3:4] * (top_filter)) + c1 - (c1 * frame0.image[:, :, 3:4] * (1-top_filter))
 	im_result[:, :, 3] = frame0.image[:, :, 3] + frame1.image[:, :, 3] * (1 - frame0.image[:, :, 3])
@@ -86,5 +105,19 @@ def z_comp(frame0, frame1):
 		we may need to do alpha blending. This should occur when q in L has a lesser z value than q in K.
 		The number of such pixels determines the alpha, where 8 is the maximum (alpha = 0
 		i.e. if L_p > K_q > L_q for all q in window, for some p (middle)
-		
 	"""
+	
+def shadow_denoise(frame, outlier_level = 99, gamma = 1.6):
+	"""
+	Assumes RGBA
+	"""
+	channels = np.split(frame.image, 4, 2)
+	for i in range(len(channels)):
+		limit = np.percentile(channels[i], outlier_level)
+		channels[i] = np.clip(channels[i], 0., limit)
+		channels[i] = channels[i] ** gamma
+		channels[i] = gaussian_filter(channels[i], 3)
+		
+	frame.image = np.dstack(channels)
+	return frame
+		
