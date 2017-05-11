@@ -70,7 +70,10 @@ def z_comp(frame0, frame1):
 				window_0 = zr0[i:i+3, j:j+3]
 				window_1 = zr1[i:i+3, j:j+3]
 				sandwiches = np.logical_and(z_here > window_0,  window_0 > window_1).astype(float)
-				frame1.image[i][j][3] = 1 - np.sum(sandwiches) / 8.
+				ratio = 1 - np.sum(sandwiches) / 8.
+				frame1.image[i][j][3] = ratio
+				c1[i][j] *= ratio
+				
 		elif edges[i][j] < 0:
 			if frame0.image[i][j][3] == 1. and frame1.image[i][j][3] > 0 and frame0.z[i][j] != 0:
 				window = zs0[i:i+3, j:j+3]
@@ -81,7 +84,10 @@ def z_comp(frame0, frame1):
 				window_0 = zr0[i:i+3, j:j+3]
 				window_1 = zr1[i:i+3, j:j+3]
 				sandwiches = np.logical_and(z_here > window_1,  window_1 > window_0).astype(float)
-				frame0.image[i][j][3] = 1 - np.sum(sandwiches) / 8.
+				ratio = 1 - np.sum(sandwiches) / 8.
+				frame0.image[i][j][3] = ratio
+				c0[i][j] *= ratio
+				
 	im_result = np.zeros(frame0.image.shape, frame0.image.dtype)
 	im_result[:, :, :3] = c0 - (c0 * frame1.image[:, :, 3:4] * (top_filter)) + c1 - (c1 * frame0.image[:, :, 3:4] * (1-top_filter))
 	im_result[:, :, 3] = frame0.image[:, :, 3] + frame1.image[:, :, 3] * (1 - frame0.image[:, :, 3])
@@ -97,7 +103,6 @@ def z_comp(frame0, frame1):
 		for each pixel where edge is negative, search in frame0 neighborhood of pixel to find the closest z value where alpha = 1
 		replace color with this, but keep the original alpha. Only search where pixels are not on edge
 		for each pixel where edge is positive, search in frame1 neighborhood and do the same
-		
 		also only do it if pixel is in front of the other image. that is other image alpha is > 0
 		----
 		Approximating alpha:
@@ -107,7 +112,7 @@ def z_comp(frame0, frame1):
 		i.e. if L_p > K_q > L_q for all q in window, for some p (middle)
 	"""
 	
-def shadow_denoise(frame, outlier_level = 99, gamma = 1.6):
+def shadow_denoise(frame, outlier_level = 99, gamma = 1.6, filter_size = 3.):
 	"""
 	Assumes RGBA
 	"""
@@ -116,7 +121,7 @@ def shadow_denoise(frame, outlier_level = 99, gamma = 1.6):
 		limit = np.percentile(channels[i], outlier_level)
 		channels[i] = np.clip(channels[i], 0., limit)
 		channels[i] = channels[i] ** gamma
-		channels[i] = gaussian_filter(channels[i], 3)
+		channels[i] = gaussian_filter(channels[i], filter_size)
 		
 	frame.image = np.dstack(channels)
 	return frame
